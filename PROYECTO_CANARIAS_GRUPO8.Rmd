@@ -1,0 +1,966 @@
+---
+title: "Proyecto AA"
+author: "Mateo Sánchez de Lamadrid, Guillermo Pardo, Javier Herrera y Gonzalo Mas"
+date: "2025-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(tidyverse)
+
+
+c23 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2023.csv", show_col_types = FALSE)
+
+c241 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2024Q1.csv", show_col_types = FALSE)
+
+c242 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2024Q2.csv", show_col_types = FALSE)
+
+c243 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2024Q3.csv", show_col_types = FALSE)
+
+c244 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2024Q4.csv", show_col_types = FALSE)
+
+c251 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2025Q1.csv", show_col_types = FALSE)
+
+c252 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2025Q2.csv", show_col_types = FALSE)
+
+c253 = read_csv("C:/Users/mateo/OneDrive/Escritorio/APRENDIZAJE/C00028A_2025Q3.csv", show_col_types = FALSE)
+
+
+canarias = bind_rows(
+  c23  %>% mutate(origen = "2023"),
+  c241 %>% mutate(origen = "2024 Q1"),
+  c242 %>% mutate(origen = "2024 Q2"),
+  c243 %>% mutate(origen = "2024 Q3"),
+  c244 %>% mutate(origen = "2024 Q4"),
+  c251 %>% mutate(origen = "2025 Q1"),
+  c252 %>% mutate(origen = "2025 Q2"),
+  c253 %>% mutate(origen = "2025 Q3")
+)
+
+
+datos = canarias %>% select(c("SEXO", "PROPOSITO", "IMPORTANCIA_CLIMA", "IMPORTANCIA_PLAYAS", "IMPORTANCIA_PAISAJES", "IMPORTANCIA_ENTORNO_AMBIENTAL", "IMPORTANCIA_OFERTA_ALOJATIVA", "IMPORTANCIA_PATRIMONIO_HISTORICO", "IMPORTANCIA_OCIO_NOCTURNO", "IMPORTANCIA_OFERTA_CULTURAL", "IMPORTANCIA_GASTRONOMIA", "IMPORTANCIA_VIAJE_SENCILLO", "IMPORTANCIA_TRANQUILIDAD", "IMPORTANCIA_PRECIO", "VISITAS_TOTAL_CANARIAS", "SATISFACCION", "CALIFICAR_EXPERIENCIA", "VOLVER_A_CANARIAS", "RECOMENDAR_CANARIAS"))
+
+datos
+
+```
+
+
+DEPURACION DE LOS DATOS
+
+```{r}
+
+#ver valores unicos de cada columna
+lapply(datos, unique)
+
+#cambiar los _z por NA´s
+datos[datos == "_Z"] = NA
+
+#eliminar todas las filas de NA´s ya que tenemos suficientes datos
+datos = datos %>% drop_na()
+
+datos
+```
+
+ANALISIS EXPLORATORIO
+
+
+```{r}
+
+library(tidyverse)
+library(corrplot)
+
+
+
+# Variables de importancia (escala NADA–ALGO–BASTANTE–MUCHO)
+cols_import <- c(
+  "IMPORTANCIA_CLIMA",
+  "IMPORTANCIA_PLAYAS",
+  "IMPORTANCIA_PAISAJES",
+  "IMPORTANCIA_ENTORNO_AMBIENTAL",
+  "IMPORTANCIA_OFERTA_ALOJATIVA",
+  "IMPORTANCIA_PATRIMONIO_HISTORICO",
+  "IMPORTANCIA_OCIO_NOCTURNO",
+  "IMPORTANCIA_OFERTA_CULTURAL",
+  "IMPORTANCIA_GASTRONOMIA",
+  "IMPORTANCIA_VIAJE_SENCILLO",
+  "IMPORTANCIA_TRANQUILIDAD",
+  "IMPORTANCIA_PRECIO"
+)
+
+# Todas las variables que queremos en la matriz de correlaciones
+vars_cor <- c(
+  "VISITAS_TOTAL_CANARIAS",
+  "SATISFACCION",
+  "VOLVER_A_CANARIAS",
+  "RECOMENDAR_CANARIAS",
+  "CALIFICAR_EXPERIENCIA",
+  cols_import
+)
+
+# Niveles ordenados para las escalas
+niv_import <- c("NADA","ALGO","BASTANTE","MUCHO")
+niv_exp    <- c("MUCHO_PEOR","PEOR","IGUAL","MEJOR","MUCHO_MEJOR")
+
+# Crear una versión "ordenada" de los datos
+datos_ord <- datos %>%
+  mutate(
+    # numéricas importantes
+    VISITAS_TOTAL_CANARIAS = as.numeric(VISITAS_TOTAL_CANARIAS),
+    SATISFACCION           = as.numeric(SATISFACCION),
+    VOLVER_A_CANARIAS      = as.numeric(VOLVER_A_CANARIAS),
+    RECOMENDAR_CANARIAS    = as.numeric(RECOMENDAR_CANARIAS),
+    # factores ordinales IMPORTANCIA_...
+    across(all_of(cols_import),
+           ~ factor(.x, levels = niv_import, ordered = TRUE)),
+    # factor ordinal CALIFICAR_EXPERIENCIA
+    CALIFICAR_EXPERIENCIA =
+      factor(CALIFICAR_EXPERIENCIA,
+             levels = niv_exp,
+             ordered = TRUE)
+  )
+
+
+num = datos %>% 
+  mutate(
+    RECOMENDAR_CANARIAS = as.numeric(RECOMENDAR_CANARIAS),
+    RECOMENDAR_BIN = if_else(RECOMENDAR_CANARIAS >= 8, "alto", "bajo"),
+    RECOMENDAR_BIN = factor(RECOMENDAR_BIN, levels = c("alto", "bajo"))
+  ) %>% count(RECOMENDAR_BIN)
+
+num
+
+
+# Pasar ordinales a numérico para correlacion
+datos_cor <- datos_ord %>%
+  mutate(across(all_of(vars_cor),
+                ~ if (is.numeric(.x)) .x else as.numeric(.x)))
+
+# Matriz completa
+mat_cor <- datos_cor %>%
+  select(all_of(vars_cor)) %>%
+  cor(use = "pairwise.complete.obs", method = "spearman")
+
+# Heatmap completo (puede verse apretado)
+corrplot(mat_cor,
+         method = "color",
+         type   = "upper",
+         tl.cex = 0.6,
+         tl.col = "black",
+         tl.srt = 45,
+         addCoef.col = "black",
+         number.cex = 0.4)
+
+# Subconjunto de variables mas correladas con la v. objetivo
+vars_peq <- c(
+  "RECOMENDAR_CANARIAS",
+  "VOLVER_A_CANARIAS",
+  "SATISFACCION",
+  "CALIFICAR_EXPERIENCIA",
+  "IMPORTANCIA_CLIMA",
+  "IMPORTANCIA_PLAYAS",
+  "IMPORTANCIA_PAISAJES",
+  "IMPORTANCIA_TRANQUILIDAD",
+  "IMPORTANCIA_GASTRONOMIA",
+  "IMPORTANCIA_PRECIO"
+)
+
+mat_cor_2 <- mat_cor[vars_peq, vars_peq]
+
+par(mar = c(5, 10, 4, 2))  
+corrplot(mat_cor_2,
+         method = "color",
+         type   = "upper",
+         tl.cex = 0.9,
+         tl.col = "black",
+         tl.srt = 45,
+         addCoef.col = "black",
+         number.cex = 0.7)
+
+
+
+corr_target <- datos_cor %>%
+  select(all_of(vars_cor)) %>%
+  summarise(across(-RECOMENDAR_CANARIAS,
+                   ~ cor(.x,
+                         datos_cor$RECOMENDAR_CANARIAS,
+                         use = "pairwise.complete.obs",
+                         method = "spearman"))) %>%
+  pivot_longer(everything(),
+               names_to = "variable",
+               values_to = "rho") %>%
+  arrange(desc(abs(rho)))
+
+# Ver tabla de correlaciones ordenada
+corr_target
+
+# Gráfico de barras
+ggplot(corr_target,
+       aes(x = reorder(variable, rho),
+           y = rho)) +
+  geom_col() +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Correlación (Spearman) con RECOMENDAR_CANARIAS",
+       x = "Variable",
+       y = "ρ")
+
+
+
+############################################################
+# 5. RECOMENDAR_CANARIAS según PROPÓSITO
+############################################################
+
+ggplot(datos_ord,
+       aes(x = PROPOSITO,
+           y = RECOMENDAR_CANARIAS)) +
+  geom_boxplot() +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Recomendación según propósito del viaje",
+       x = "Propósito", y = "RECOMENDAR_CANARIAS")
+
+############################################################
+# 6. RECOMENDAR_CANARIAS según IMPORTANCIA_CLIMA
+############################################################
+
+ggplot(datos_ord,
+       aes(x = IMPORTANCIA_CLIMA,
+           y = RECOMENDAR_CANARIAS)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Recomendación según IMPORTANCIA_CLIMA",
+       x = "Importancia del clima", y = "RECOMENDAR_CANARIAS")
+
+
+
+```
+
+MODELO REGRESION LOGISTICA
+```{r}
+
+
+
+library(tidymodels)
+
+set.seed(20250914) #fijamos semilla
+
+#pasamos la variable objetivo de numerica a binaria
+
+datoss <- datos %>% 
+  mutate(
+    RECOMENDAR_CANARIAS = as.numeric(RECOMENDAR_CANARIAS),
+    RECOMENDAR_BIN = if_else(RECOMENDAR_CANARIAS >= 8, "alto", "bajo"),
+    RECOMENDAR_BIN = factor(RECOMENDAR_BIN, levels = c("alto", "bajo"))
+  )
+
+
+#1. Dividimos en Train y test
+############################################################
+
+set.seed(123)
+cust_split <- initial_split(datoss,
+                            prop   = 0.8,
+                            strata = RECOMENDAR_BIN)
+
+train <- training(cust_split)
+test  <- testing(cust_split)
+
+set.seed(234)
+folds <- vfold_cv(train,
+                  v      = 5,
+                  strata = RECOMENDAR_BIN)
+
+
+# 2. Recipe 
+############################################################
+
+rec_logit <- recipe(RECOMENDAR_BIN ~ ., data = train) %>%
+  step_rm(RECOMENDAR_CANARIAS) %>%
+  step_string2factor(all_nominal_predictors()) %>%
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_zv(all_predictors()) %>%
+  step_normalize(all_numeric_predictors())
+
+
+# 3. Especificación del modelo 
+############################################################
+
+logit_spec <- logistic_reg(
+  mode = "classification"
+  
+) %>%
+  set_engine("glm")
+
+logit_wf <- workflow() %>%
+  add_recipe(rec_logit) %>%
+  add_model(logit_spec)
+
+
+# 4. Validación cruzada con métricas
+############################################################
+
+metrics_cls <- metric_set(accuracy, roc_auc, sens, spec, pr_auc)
+
+set.seed(456)
+logit_res <- fit_resamples(
+  logit_wf,
+  resamples = folds,
+  metrics   = metrics_cls,
+  control   = control_resamples(save_pred = TRUE,
+                                verbose   = TRUE)
+)
+
+# Métricas medias en CV
+logit_res %>%
+  collect_metrics()
+
+
+# 5. Modelo final y evaluación en test
+############################################################
+
+logit_final <- last_fit(
+  logit_wf,
+  split   = cust_split,
+  metrics = metrics_cls
+)
+
+# Métricas finales en test
+logit_final %>% collect_metrics()
+
+
+# 6. Matriz de confusión y curva ROC en test
+############################################################
+
+# Matriz de confusión
+logit_final %>%
+  collect_predictions() %>%
+  conf_mat(truth = RECOMENDAR_BIN,
+           estimate = .pred_class) %>%
+  autoplot(type = "heatmap") +
+  ggtitle("Regresión logística - Matriz de confusión (test)")
+
+# Curva ROC
+logit_final %>%
+  collect_predictions() %>%
+  roc_curve(RECOMENDAR_BIN, .pred_alto) %>%
+  autoplot() +
+  ggtitle("Regresión logística - Curva ROC (test)")
+
+
+# 7. Coeficientes del modelo (interpretación)
+############################################################
+
+# Ajustamos en TODO el train para ver coeficientes
+logit_fit_train <- fit(logit_wf, data = train)
+
+# Coeficientes (log-odds)
+logit_fit_train %>%
+  extract_fit_parsnip() %>%
+  tidy() %>%
+  arrange(desc(estimate))  # variables que empujan hacia "alto" arriba
+
+```
+
+
+
+
+
+MODELO XGBOOST
+
+
+```{r}
+
+
+library(tidymodels)
+library(finetune)
+library(vip)
+
+set.seed(20250914)
+
+
+# Otra vez es un modelo de clasificacion, asi que variable objetivo numerica a binaria
+
+datoss <- datos %>% 
+  mutate(
+    RECOMENDAR_CANARIAS = as.numeric(RECOMENDAR_CANARIAS),
+    RECOMENDAR_BIN = if_else(RECOMENDAR_CANARIAS >= 8, "alto", "bajo"),
+    RECOMENDAR_BIN = factor(RECOMENDAR_BIN, levels = c("alto", "bajo"))
+  )
+
+
+# 1. Dividimos en train y test
+############################################################
+
+set.seed(123)
+cust_split <- initial_split(datoss,
+                            prop   = 0.8,
+                            strata = RECOMENDAR_BIN)
+
+train <- training(cust_split)
+test  <- testing(cust_split)
+
+set.seed(234)
+folds <- vfold_cv(train,
+                  v      = 5,
+                  strata = RECOMENDAR_BIN)
+
+
+# 2. Recipe (preprocesado)
+############################################################
+
+rec2 <- recipe(RECOMENDAR_BIN ~ ., data = train) %>%
+  step_rm(RECOMENDAR_CANARIAS) %>%                  # quitamos versión numérica
+  step_string2factor(all_nominal_predictors()) %>%  # chr -> factor
+  step_unknown(all_nominal_predictors()) %>%        # categoría "unknown" para NA
+  step_dummy(all_nominal_predictors()) %>%          # dummies one-hot
+  step_impute_median(all_numeric_predictors()) %>%  # imputar NA numéricas
+  step_zv(all_predictors()) %>%                     # columnas sin varianza
+  step_normalize(all_numeric_predictors())          # escalar numéricas
+
+metrics_cls <- metric_set(accuracy, roc_auc, sens, spec, pr_auc) #metricas
+
+
+# 3. Especificación del modelo con hiperparametros a elegir
+############################################################
+
+xgb_spec <- boost_tree(
+  trees          = 100,       #100 arboles por la complejidad temporal  
+  tree_depth     = tune(),
+  min_n          = tune(),
+  loss_reduction = tune(),      # gamma
+  sample_size    = tune(),      # subsample
+  mtry           = tune(),      # nº predictores por split
+  learn_rate     = tune()
+) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+xgb_wf <- workflow() %>%
+  add_recipe(rec2) %>%
+  add_model(xgb_spec)
+
+
+# 4. Grid de hiperparámetros 
+############################################################
+
+xgb_grid <- grid_space_filling(
+  tree_depth(),
+  min_n(),
+  loss_reduction(),
+  sample_size = sample_prop(),
+  finalize(mtry(), train),
+  learn_rate(),
+  size = 5      # nº de combinaciones a probar
+)
+
+
+# 5. Busqueda en rejilla
+############################################################
+
+set.seed(345)
+xgb_res <- tune_grid(
+  xgb_wf,
+  resamples = folds,
+  grid      = xgb_grid,
+  metrics   = metrics_cls,
+  control   = control_grid(save_pred = TRUE,
+                           verbose   = TRUE)
+)
+
+# Resultados ordenados
+xgb_res %>%
+  collect_metrics() %>%
+  arrange(.metric, desc(mean))
+
+# Mejores hiperparámetros según ROC AUC
+best_auc <- select_best(xgb_res, metric = "roc_auc")
+
+
+# 6. Workflow final e interpretacion de variables
+############################################################
+
+final_xgb <- finalize_workflow(xgb_wf, best_auc)
+
+# Entrenamos en TODO el train para ver VIP
+final_fit_train <- fit(final_xgb, data = train)
+
+final_fit_train %>%
+  extract_fit_parsnip() %>%
+  vip(geom = "point")
+
+# 7. Evaluación final en test
+############################################################
+
+final_rs <- last_fit(
+  final_xgb,
+  split   = cust_split,
+  metrics = metrics_cls
+)
+
+# Métricas finales en test
+final_rs %>% collect_metrics()
+
+# Curva ROC
+final_rs %>%
+  collect_predictions() %>%
+  roc_curve(RECOMENDAR_BIN, .pred_alto) %>%
+  autoplot() +
+  ggtitle("XGBoost - Curva ROC (test)")
+
+
+# Matriz de confusión 
+final_rs %>%
+  collect_predictions() %>%
+  conf_mat(RECOMENDAR_BIN, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  ggtitle("XGBoost - Matriz de confusión (test)")
+
+
+
+```
+
+
+MODELO NAIVE BAYES
+
+```{r}
+
+
+library(tidymodels)
+library(naivebayes)
+library(discrim)
+library(parsnip)
+
+set.seed(20250914)
+
+
+# 0. Preparar datos: binarizar target y ordenar escalas
+############################################################
+
+# columnas con escala NADA/ALGO/BASTANTE/MUCHO
+cols_import <- c(
+  "IMPORTANCIA_CLIMA",
+  "IMPORTANCIA_PLAYAS",
+  "IMPORTANCIA_PAISAJES",
+  "IMPORTANCIA_ENTORNO_AMBIENTAL",
+  "IMPORTANCIA_OFERTA_ALOJATIVA",
+  "IMPORTANCIA_PATRIMONIO_HISTORICO",
+  "IMPORTANCIA_OCIO_NOCTURNO",
+  "IMPORTANCIA_OFERTA_CULTURAL",
+  "IMPORTANCIA_GASTRONOMIA",
+  "IMPORTANCIA_VIAJE_SENCILLO",
+  "IMPORTANCIA_TRANQUILIDAD",
+  "IMPORTANCIA_PRECIO"
+)
+
+datos_nb <- datos %>%
+  mutate(
+    # target original a numérico
+    RECOMENDAR_CANARIAS = as.numeric(RECOMENDAR_CANARIAS),
+    # 8,9,10 => "SI", resto => "NO"
+    RECOMENDAR_CANARIAS = if_else(RECOMENDAR_CANARIAS >= 8, "Alto", "Bajo"),
+    # nivel positivo = "SI" (primero, para métricas tipo ROC)
+    RECOMENDAR_CANARIAS = factor(RECOMENDAR_CANARIAS,
+                                 levels = c("Alto", "Bajo")),
+
+    # numéricas
+    SATISFACCION           = as.numeric(SATISFACCION),
+    VOLVER_A_CANARIAS      = as.numeric(VOLVER_A_CANARIAS),
+    VISITAS_TOTAL_CANARIAS = as.numeric(VISITAS_TOTAL_CANARIAS),
+
+    # ordinales 1–4
+    across(all_of(cols_import),
+           ~ as.numeric(factor(.x,
+                               levels = c("NADA","ALGO","BASTANTE","MUCHO"),
+                               ordered = TRUE))),
+
+    # experiencia 1–5
+    CALIFICAR_EXPERIENCIA =
+      as.numeric(factor(CALIFICAR_EXPERIENCIA,
+                        levels = c("MUCHO_PEOR","PEOR","IGUAL","MEJOR","MUCHO_MEJOR"),
+                        ordered = TRUE))
+  )
+
+
+# 1. Split train / test
+############################################################
+
+split_nb <- initial_split(datos_nb,
+                          prop   = 0.8,
+                          strata = RECOMENDAR_CANARIAS)
+
+train_nb <- training(split_nb)
+test_nb  <- testing(split_nb)
+
+set.seed(123)
+folds_nb <- vfold_cv(train_nb,
+                     v      = 5,
+                     strata = RECOMENDAR_CANARIAS)
+
+# 2. Recipe para Naive Bayes
+############################################################
+
+
+rec_nb <- recipe(RECOMENDAR_CANARIAS ~ ., data = train_nb) %>%
+  step_string2factor(all_nominal_predictors()) %>%  # chr -> factor
+  step_dummy(all_nominal_predictors()) %>%          # one-hot
+  step_impute_median(all_numeric_predictors()) %>%  # imputar NA numéricas
+  step_zv(all_predictors())                         # quitar columnas constantes
+
+
+# 3. Especificación Naive Bayes
+############################################################
+
+nb_spec <- naive_Bayes(
+  mode = "classification"
+) %>%
+  set_engine("naivebayes")
+
+nb_wf <- workflow() %>%
+  add_recipe(rec_nb) %>%
+  add_model(nb_spec)
+
+
+# 4. Métricas y validación cruzada
+############################################################
+
+metrics_nb <- metric_set(
+  accuracy,
+  sensitivity,
+  specificity,
+  roc_auc
+)
+
+set.seed(456)
+nb_res <- fit_resamples(
+  nb_wf,
+  resamples = folds_nb,
+  metrics   = metrics_nb,
+  control   = control_resamples(save_pred = TRUE,
+                                verbose   = TRUE)
+)
+
+# Métricas medias en CV
+nb_res %>%
+  collect_metrics()
+
+
+# 5. Modelo final y evaluación en test
+############################################################
+
+final_nb_fit <- last_fit(
+  nb_wf,
+  split   = split_nb,
+  metrics = metrics_nb
+)
+
+# Métricas finales en test
+final_nb_fit %>% collect_metrics()
+
+# 6. Matriz de confusión en test
+############################################################
+
+cm_nb <- final_nb_fit %>%
+  collect_predictions() %>%
+  conf_mat(truth   = RECOMENDAR_CANARIAS,
+           estimate = .pred_class)
+
+cm_nb
+
+cm_nb %>%
+  autoplot(type = "heatmap") +
+  scale_fill_continuous(type = "viridis") +
+  labs(title = "Naive Bayes - Matriz de confusión (test)")
+
+
+# 7. Curva ROC
+############################################################
+
+roc_nb <- final_nb_fit %>%
+  collect_predictions() %>%
+  roc_curve(RECOMENDAR_CANARIAS, .pred_Alto)
+
+autoplot(roc_nb) +
+  labs(title = "Naive Bayes - Curva ROC (test)")
+
+```
+
+
+
+PRUEBAS XGBOOST
+```{r}
+
+
+#Elegimos quedarnos con XGBOOST por que tiene el mayor AUC, ahora vamos a hacer pruebas con el
+
+
+library(tibble)
+
+
+#creamos una nueva base de datos con datos aleatorios
+
+tibble_15 <- tibble(
+  SEXO = c(
+    "H","M","M","H","H","M","H","M","H","M",
+    "H","M","H","M","H"
+  ),
+  PROPOSITO = c(
+    "VACACIONES","NEGOCIOS","VISITA_FAMILIA","VACACIONES","SALUD",
+    "ESTUDIOS","NEGOCIOS","VACACIONES","OTROS","VACACIONES",
+    "NEGOCIOS","VISITA_FAMILIA","VACACIONES","SALUD","OTROS"
+  ),
+
+  VISITAS_TOTAL_CANARIAS = c(
+    0,2,1,6,0,
+    3,10,8,1,5,
+    7,0,12,1,4
+  ),
+
+  SATISFACCION = c(
+    10,5,7,9,3,
+    10,8,9,5,10,
+    4,2,9,3,7
+  ),
+
+  VOLVER_A_CANARIAS = c(
+    10,4,6,10,2,
+    0,9,8,3,10,
+    3,1,10,2,6
+  ),
+
+  CALIFICAR_EXPERIENCIA = c(
+    "MUCHO_MEJOR","IGUAL","MEJOR","MUCHO_MEJOR","PEOR",
+    "IGUAL","MEJOR","MEJOR","IGUAL","MUCHO_MEJOR",
+    "PEOR","MUCHO_PEOR","MUCHO_MEJOR","PEOR","IGUAL"
+  ),
+
+  IMPORTANCIA_CLIMA = c(
+    "MUCHO","BASTANTE","ALGO","MUCHO","ALGO",
+    "ALGO","MUCHO","MUCHO","BASTANTE","MUCHO",
+    "ALGO","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_PLAYAS = c(
+    "MUCHO","NADA","BASTANTE","MUCHO","ALGO",
+    "BASTANTE","MUCHO","MUCHO","ALGO","MUCHO",
+    "NADA","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_PAISAJES = c(
+    "MUCHO","ALGO","MUCHO","MUCHO","ALGO",
+    "BASTANTE","MUCHO","MUCHO","ALGO","MUCHO",
+    "ALGO","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_ENTORNO_AMBIENTAL = c(
+    "BASTANTE","NADA","ALGO","MUCHO","NADA",
+    "ALGO","BASTANTE","MUCHO","NADA","MUCHO",
+    "NADA","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_OFERTA_ALOJATIVA = c(
+    "BASTANTE","ALGO","ALGO","MUCHO","ALGO",
+    "ALGO","BASTANTE","MUCHO","ALGO","BASTANTE",
+    "NADA","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_PATRIMONIO_HISTORICO = c(
+    "ALGO","NADA","BASTANTE","MUCHO","NADA",
+    "ALGO","ALGO","BASTANTE","NADA","MUCHO",
+    "NADA","NADA","MUCHO","NADA","BASTANTE"
+  ),
+
+  IMPORTANCIA_OCIO_NOCTURNO = c(
+    "ALGO","MUCHO","ALGO","BASTANTE","NADA",
+    "BASTANTE","ALGO","BASTANTE","NADA","MUCHO",
+    "MUCHO","NADA","ALGO","NADA","ALGO"
+  ),
+
+  IMPORTANCIA_OFERTA_CULTURAL = c(
+    "BASTANTE","ALGO","ALGO","MUCHO","NADA",
+    "ALGO","BASTANTE","MUCHO","ALGO","MUCHO",
+    "NADA","NADA","MUCHO","NADA","ALGO"
+  ),
+
+  IMPORTANCIA_GASTRONOMIA = c(
+    "MUCHO","ALGO","BASTANTE","MUCHO","ALGO",
+    "ALGO","MUCHO","MUCHO","ALGO","MUCHO",
+    "ALGO","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_VIAJE_SENCILLO = c(
+    "BASTANTE","ALGO","ALGO","MUCHO","ALGO",
+    "BASTANTE","MUCHO","MUCHO","ALGO","MUCHO",
+    "ALGO","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_TRANQUILIDAD = c(
+    "MUCHO","ALGO","ALGO","MUCHO","ALGO",
+    "ALGO","MUCHO","MUCHO","BASTANTE","MUCHO",
+    "ALGO","NADA","MUCHO","ALGO","BASTANTE"
+  ),
+
+  IMPORTANCIA_PRECIO = c(
+    "BASTANTE","MUCHO","ALGO","ALGO","MUCHO",
+    "BASTANTE","ALGO","ALGO","MUCHO","BASTANTE",
+    "MUCHO","MUCHO","ALGO","MUCHO","BASTANTE"
+  )
+  
+  
+)
+
+tibble_15 <- tibble_15 %>% mutate(RECOMENDAR_CANARIAS = NA)
+
+
+pred_15 <- predict(
+  final_fit_train,
+  new_data = tibble_15,
+  type = "prob"
+) %>%
+  bind_cols(
+    predict(final_fit_train,
+            new_data = tibble_15,
+            type = "class")
+  ) %>%
+  bind_cols(tibble_15) %>%
+  relocate(.pred_class, .pred_alto, .pred_bajo)
+
+pred_15
+
+
+
+```
+
+
+
+INTERPRETACION XGBOOST
+
+```{r}
+
+library(vip)
+
+# Importancia que tiene cada variable para afectar a la prediccion
+final_fit_train %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20, geom = "point")
+
+vip_tbl <- final_fit_train %>%
+  extract_fit_parsnip() %>%
+  vip(geom = "point", num_features = 20, include_type = TRUE) %>% 
+  .$data   #verlo en una tabla
+
+vip_tbl
+
+
+
+#ITERAMOS LOS VALORES PARA VER COMO AFECTAN
+
+# Cogemos persona 3 de tibble_15 
+persona3 <- tibble_15 %>%
+  slice(3) %>%
+  mutate(RECOMENDAR_CANARIAS = NA)   # para que la receta no falle
+
+# Reutilizamos la función sens_num pero con base distinta
+sens_num_persona <- function(persona, var_name, valores) {
+
+  df_new <- tibble(!!var_name := valores) %>%
+    crossing(persona %>% select(-all_of(var_name)))
+
+  probs <- predict(final_fit_train,
+                   new_data = df_new,
+                   type = "prob")$.pred_alto
+
+  df_new %>%
+    mutate(prob_alto = probs)
+}
+
+sens_p3_sat <- sens_num_persona(persona3, "SATISFACCION", 1:10)
+
+ggplot(sens_p3_sat,
+       aes(x = SATISFACCION, y = prob_alto)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Persona 3: efecto de SATISFACCION sobre P(alto)")
+
+sens_p3_sat <- sens_num_persona(persona3, "VOLVER_A_CANARIAS", 1:10)
+
+ggplot(sens_p3_sat,
+       aes(x = VOLVER_A_CANARIAS, y = prob_alto)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "Persona 3: efecto de SATISFACCION sobre P(alto)")
+
+
+```
+LAS MAS IMPORTANTES SON "vOLVER A CANARIAS" Y "SATISFACCION", PERO ESTAS DOS POR CUALES SE VEN MAS AFECTADAS
+
+```{r}
+library(tidymodels)
+library(dplyr)
+library(tidyr)
+
+# 1. Creamos un recipe que convierte TODO en numérico
+rec_num <- recipe(~ ., data = datos) %>%
+  step_string2factor(all_nominal_predictors()) %>%
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())    # convierte categóricas en dummies
+  
+
+# 2. Aplicamos la transformación
+prep_num <- prep(rec_num)
+datos_num <- bake(prep_num, new_data = datos)
+
+#3. Hacemos un analisis de correlacion de la variable "VOLVER_A_CANARIAS", excluyendo las tres siguientes
+
+datos_corr <- datos_num %>%
+  select(-VOLVER_A_CANARIAS,
+         -SATISFACCION,
+         -RECOMENDAR_CANARIAS)
+
+cor_volver <- datos_corr %>%
+  summarise(across(
+    everything(),
+    ~ cor(.x, datos_num$VOLVER_A_CANARIAS, use = "pairwise.complete.obs")
+  )) %>%
+  pivot_longer(everything(),
+               names_to = "variable",
+               values_to = "correlacion") %>%
+  arrange(desc(abs(correlacion)))
+
+cor_volver
+
+
+#4. Lo mismo para satisfaccion
+
+datos_corr_satis <- datos_num %>%
+  select(
+    -SATISFACCION,
+    -VOLVER_A_CANARIAS,
+    -RECOMENDAR_CANARIAS
+  )
+
+cor_satis <- datos_corr_satis %>%
+  summarise(across(
+    everything(),
+    ~ cor(.x, datos_num$SATISFACCION, use = "pairwise.complete.obs")
+  )) %>%
+  pivot_longer(
+    everything(),
+    names_to = "variable",
+    values_to = "correlacion"
+  ) %>%
+  arrange(desc(abs(correlacion)))
+
+cor_satis
+
+```
+
